@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// SQLite não tem enum nativo: valores permitidos ficam em src/lib/therapy.ts.
+// Para Postgres, troque o provider e converta os campos String em enums.
+
+model Patient {
+  id            String        @id @default(cuid())
+  name          String // nome completo
+  cpf           String        @unique // somente dígitos
+  birthDate     DateTime
+  sex           String? // F | M | O
+  phone         String // somente dígitos, com DDD
+  email         String?
+  zipCode       String?
+  street        String?
+  number        String?
+  complement    String?
+  district      String?
+  city          String?
+  state         String?
+  emergencyName  String?
+  emergencyPhone String?
+  payerType     String        @default("PARTICULAR") // AMOR_SAUDE | PARTICULAR | PLANO_SAUDE
+  insurerName   String? // operadora (só PLANO_SAUDE)
+  insuranceCard String? // nº da carteirinha
+  complaint     String? // espelho da admissão, usado nas listas
+  diagnosis     String?
+  therapy       String        @default("ORTOPEDICA") // tipo principal de fisioterapia
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  admission     Admission?
+  appointments  Appointment[]
+  evolutions    Evolution[]
+  payments      Payment[]
+}
+
+model Admission {
+  id               String   @id @default(cuid())
+  patientId        String   @unique
+  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  date             DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  // anamnese
+  referralDoctor   String?
+  medicalDiagnosis String?
+  cid              String?
+  complaint        String
+  history          String? // história da doença atual
+  comorbidities    String?
+  medications      String?
+  surgeries        String?
+  allergies        String?
+  habits           String?
+  // avaliação física
+  painScale        Int // EVA 0–10
+  painLocation     String?
+  vitalSigns       String?
+  posture          String?
+  rom              String? // amplitude de movimento
+  strength         String?
+  specialTests     String?
+  // diagnóstico e plano
+  physioDiagnosis  String
+  goals            String
+  therapy          String
+  plannedSessions  Int?
+  frequency        String?
+  conduct          String?
+  consent          Boolean  @default(false)
+  authorId         String? // quem fez a admissão
+  author           User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+}
+
+model Appointment {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  durationMin Int      @default(50)
+  therapy     String // tipo de fisioterapia aplicada na sessão
+  status      String   @default("AGENDADA") // AGENDADA | CONFIRMADA | REALIZADA | FALTOU | CANCELADA
+  notes       String?
+  professionalId String? // profissional que atende
+  professional   User?   @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  payments    Payment[]
+  evolution   Evolution?
+  @@index([startsAt])
+}
+
+model Evolution {
+  id            String       @id @default(cuid())
+  patientId     String
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId String?      @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  date          DateTime     @default(now())
+  pain          Int // escala 0–10
+  techniques    String? // condutas / técnicas
+  content       String // evolução clínica
+  authorId      String? // quem registrou
+  author        User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  @@index([patientId, date])
+}
+
+model Payment {
+  id            String       @id @default(cuid())
+  patientId     String
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  description   String
+  amount        Int // centavos
+  method        String? // PIX | DINHEIRO | CARTAO_CREDITO | CARTAO_DEBITO
+  status        String       @default("PENDENTE") // PENDENTE | PAGO
+  dueDate       DateTime
+  paidAt        DateTime?
+  @@index([status, dueDate])
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String        @default("PROFISSIONAL") // ADMIN | PROFISSIONAL
+  crefito      String? // registro profissional (usado no laudo)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
+  evolutions   Evolution[]
+  admissions   Admission[]
+}
